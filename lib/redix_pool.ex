@@ -119,4 +119,47 @@ defmodule RedixPool do
       RedixPool.Config.get(:timeout, 5000)
     )
   end
+
+  @doc"""
+  Wrapper to call `Redix.transaction_pipeline/3` inside a poolboy worker.
+
+  ## Examples
+
+      iex> RedixPool.transaction_pipeline([["INCR", "mykey"], ["INCR", "mykey"], ["DECR", "mykey"]])
+      {:ok, [1, 2, 1]}
+
+      iex> RedixPool.transaction_pipeline([["SET", "k", "foo"], ["INCR", "k"], ["GET", "k"]])
+      {:ok, ["OK", %Redix.Error{message: "ERR value is not an integer or out of range"}, "foo"]}
+  """
+  @spec transaction_pipeline([command], Keyword.t) ::
+        {:ok, [Redix.Protocol.redis_value]} | {:error, atom}
+  def transaction_pipeline(args, opts \\ []) do
+    :poolboy.transaction(
+      @pool_name,
+      fn(worker) -> GenServer.call(worker, {:transaction_pipeline, args, opts}) end,
+      Config.get(:timeout, 5000)
+    )
+  end
+
+  @doc"""
+  Wrapper to call `Redix.transaction_pipeline!/3` inside a poolboy worker, raising if there
+  are errors issuing the commands (but not if the commands are successfully
+  issued and result in errors).
+
+  ## Examples
+
+      iex> RedixPool.transaction_pipeline!([["INCR", "mykey"], ["INCR", "mykey"], ["DECR", "mykey"]])
+      [1, 2, 1]
+
+      iex> RedixPool.transaction_pipeline!([["SET", "k", "foo"], ["INCR", "k"], ["GET", "k"]])
+      ["OK", %Redix.Error{message: "ERR value is not an integer or out of range"}, "foo"]
+  """
+  @spec transaction_pipeline!([command], Keyword.t) :: [Redix.Protocol.redis_value] | no_return
+  def transaction_pipeline!(args, opts \\ []) do
+    :poolboy.transaction(
+      @pool_name,
+      fn(worker) -> GenServer.call(worker, {:transaction_pipeline!, args, opts}) end,
+      RedixPool.Config.get(:timeout, 5000)
+    )
+  end
 end
